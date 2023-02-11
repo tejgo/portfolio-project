@@ -1,79 +1,81 @@
-select *
-from portfolioproject..coviddeaths
-order by 3,4
+--standardize date format
+select SaleDate, convert (date,SaleDate) 
+from PorfolioProject..NashvilleHousing
+update NashvilleHousing
+set SaleDate=convert (date,SaleDate)
 
-select location,total_Cases,total_deaths
-from portfolioproject..coviddeaths
+--populate propert address data
 
---percent of deaths and total cases
+select a.parcelid,a.Propertyaddress,b.parcelid,b.propertyaddress,isnull (a.PropertyAddress,b.PropertyAddress)
+from PorfolioProject..NashvilleHousing a
+join PorfolioProject..NashvilleHousing b
+	on a.ParcelID=b.ParcelID
+	and a.[UniqueID ] != b.[UniqueID ]
+where a.PropertyAddress is null
 
-select location,date,total_Cases,total_deaths,cast((total_deaths/total_cases)*100 as decimal (5,2)) as percentage_deaths
-from portfolioproject..coviddeaths
-where location like '%states%'
-order by percentage_deaths desc
+update a
+set a.propertyaddress = isnull (a.PropertyAddress,b.PropertyAddress)
+from PorfolioProject..NashvilleHousing a
+join PorfolioProject..NashvilleHousing b
+	on a.ParcelID=b.ParcelID
+	and a.[UniqueID ] != b.[UniqueID ]
+	where a.PropertyAddress is null
 
---looking for highest infected country by their population
+select propertyaddress
+from PorfolioProject..NashvilleHousing
+where PropertyAddress is null
 
-select location,population,max(total_Cases) as infected_people,population,max(cast((total_cases/population)*100 as decimal (5,2))) as percentage_infected
-from portfolioproject..coviddeaths
---where location like '%states%'
-group by location,population 
-order by percentage_infected desc
+-- breakind address into different columns
 
---highest deaths per population for countries
+select 
+SUBSTRING(PropertyAddress,1,CHARINDEX (',',PropertyAddress)-1),
+SUBSTRING(PropertyAddress,CHARINDEX (',',PropertyAddress)+1,len(propertyaddress))
+from PorfolioProject.dbo.NashvilleHousing
 
-select location,population,max(cast(total_deaths as int)) as people_died,max(cast((total_deaths/population)*100 as decimal (5,2))) as percentage_deaths
-from portfolioproject..coviddeaths
-group by location,population 
-order by percentage_deaths desc
+--change Y and N to yes and no
 
--- total people died in each continent
-select continent,sum(cast(total_deaths as int)) as people_died
-from portfolioproject..coviddeaths
-where continent is not null
-group by continent
-order by people_died desc
+select distinct(SoldAsVacant),
+count (soldasvacant)
+from PorfolioProject..NashvilleHousing
+group by SoldAsVacant
 
--- global numbers and total deaths percentage
-select date,sum(cast(new_deaths as int))as total_deaths,sum(cast (new_cases as int)) as people_infected,sum(cast(new_deaths as decimal))/sum(cast (new_cases as decimal))*100 as percentage_deaths
-from portfolioproject..coviddeaths
-where continent is not null
-group by date
-order by date
+select SoldAsVacant,
+case when soldasvacant = 'y' then 'yes'
+when SoldAsVacant='n' then 'no'
+else soldasvacant
+end
 
---total population and vaccinated popultaion by location
-select cov.date,cov.location,cov.total_deaths, cov.population, vac.new_vaccinations, sum (convert (decimal,vac.new_vaccinations)) over (partition by cov.location order by cov.location,cov.date) as vaccinated_people
-from portfolioproject..coviddeaths cov
-join portfolioproject..vaccination$ vac
-	on cov.location = vac.location
-	and cov.date = vac.date
-where cov.continent is not null	
-order by 2
+from PorfolioProject..NashvilleHousing
 
---temp table usecase
-with temptab (date,location,total_deaths,population,new_vaccinations,vaccinated_people)
-as
-(
-select cov.date,cov.location,cov.total_deaths, cov.population, vac.new_vaccinations, sum (convert (decimal,vac.new_vaccinations)) over (partition by cov.location order by cov.location,cov.date) as vaccinated_people
-from portfolioproject..coviddeaths cov
-join portfolioproject..vaccination$ vac
-	on cov.location = vac.location
-	and cov.date = vac.date
-where cov.continent is not null	
-)
-select * ,(vaccinated_people/population )*100 as percentage_of_vaccinated_people
-from temptab
 
---create view table to later do visulization
+update PorfolioProject..NashvilleHousing
+set SoldAsVacant = case when SoldAsVacant = 'y' then 'yes'
+when SoldAsVacant='n' then 'no'
+else SoldAsVacant
+end
 
-create view temptable as
-select cov.date,cov.location,cov.total_deaths, cov.population, vac.new_vaccinations, sum (convert (decimal,vac.new_vaccinations)) over (partition by cov.location order by cov.location,cov.date) as vaccinated_people
-from portfolioproject..coviddeaths cov
-join portfolioproject..vaccination$ vac
-	on cov.location = vac.location
-	and cov.date = vac.date
-where cov.continent is not null	
+--remove duplicates
+
+with RowNumCte as(
+select *,
+ROW_NUMBER () over (
+partition by	parcelid,
+				landuse,
+				propertyaddress,
+				saledate,
+				saleprice,
+				legalreference
+				order by uniqueid) rownum
+from PorfolioProject..NashvilleHousing
+)  
+delete
+from RowNumCte
+where rownum >1
 
 
 
 
+
+
+  select *
+  from PorfolioProject..NashvilleHousing
